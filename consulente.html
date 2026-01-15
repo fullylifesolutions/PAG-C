@@ -875,12 +875,12 @@
   
   <div class="panel">
     <h2>Tutti i profili</h2>
-    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
-      <label class="file-upload-btn" style="margin: 0;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+      <label class="file-upload-btn" style="margin: 0; text-align: center; display: flex; align-items: center; justify-content: center;">
         📁 Importa da File
         <input type="file" id="fileInput" accept=".json" onchange="importProfile()">
       </label>
-      <button onclick="showPasteModal()">📋 Incolla JSON</button>
+      <button onclick="showPasteModal()" style="white-space: nowrap;">📋 Incolla JSON</button>
     </div>
     <div id="profiliList" class="item-list"></div>
   </div>
@@ -1709,6 +1709,8 @@ function updateCarouselButtons() {
   if (currentSlide) currentSlide.textContent = index + 1;
 }
 
+let multiSelectMode = false;
+
 function loadProfiliList() {
   const list = document.getElementById('profiliList');
   const persona = getCurrentPersona();
@@ -1718,23 +1720,93 @@ function loadProfiliList() {
     return;
   }
   
-  list.innerHTML = persona.profili.map((profilo, index) => {
+  // Pulsante selezione multipla
+  const multiSelectBtn = `
+    <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <button onclick="toggleMultiSelect()" id="multiSelectBtn" style="background: #ba975c; padding: 10px 16px; border-radius: 6px; border: none; color: #f5f5f5; font-weight: bold; cursor: pointer;">
+        ☐ Seleziona multipli
+      </button>
+      <button onclick="exportMultiple()" id="multiExportBtn" style="display: none; background: #f5a623; padding: 10px 20px; border-radius: 6px; border: none; color: #1a1a1a; font-weight: bold; cursor: pointer;">
+        📤 Esporta selezionati (<span id="selectedCount">0</span>)
+      </button>
+    </div>
+  `;
+  
+  list.innerHTML = multiSelectBtn + persona.profili.map((profilo, index) => {
     const sppText = formatSPP(profilo.spp);
     return `
-    <div class="profile-card">
-      <div class="profile-card-header">
-        <div>
-          <strong>${profilo.descrizione}</strong><br>
-          ${sppText ? `<span style="color: #f5a623; font-size: 13px; font-weight: bold;">SPP: ${sppText}</span><br>` : ''}
-          <small>${formatDate(profilo.data)} • ${profilo.categoria}</small>
-        </div>
-        <div>
-          <button onclick="viewProfiloDetail(${index})">👁️ Visualizza</button>
-          <button class="secondary" onclick="deleteProfilo(${index})">🗑️</button>
+    <div class="profile-card" style="display: flex; align-items: center; gap: 10px;">
+      <input type="checkbox" class="profile-checkbox" data-index="${index}" style="display: none; width: 20px; height: 20px; cursor: pointer;" onchange="updateSelectedCount()">
+      <div style="flex: 1;">
+        <div class="profile-card-header">
+          <div>
+            <strong>${profilo.descrizione}</strong><br>
+            ${sppText ? `<span style="color: #f5a623; font-size: 13px; font-weight: bold;">SPP: ${sppText}</span><br>` : ''}
+            <small>${formatDate(profilo.data)} • ${profilo.categoria}</small>
+          </div>
+          <div>
+            <button onclick="viewProfiloDetail(${index})">👁️ Visualizza</button>
+            <button class="secondary" onclick="deleteProfilo(${index})">🗑️</button>
+          </div>
         </div>
       </div>
     </div>
   `}).join('');
+}
+
+function toggleMultiSelect() {
+  multiSelectMode = !multiSelectMode;
+  const checkboxes = document.querySelectorAll('.profile-checkbox');
+  const btn = document.getElementById('multiSelectBtn');
+  const exportBtn = document.getElementById('multiExportBtn');
+  
+  checkboxes.forEach(cb => {
+    cb.style.display = multiSelectMode ? 'inline-block' : 'none';
+    cb.checked = false;
+  });
+  
+  btn.textContent = multiSelectMode ? '✕ Annulla selezione' : '☐ Seleziona multipli';
+  btn.style.background = multiSelectMode ? '#e74c3c' : '#ba975c';
+  exportBtn.style.display = 'none';
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const checked = document.querySelectorAll('.profile-checkbox:checked');
+  document.getElementById('selectedCount').textContent = checked.length;
+  document.getElementById('multiExportBtn').style.display = checked.length > 0 ? 'block' : 'none';
+}
+
+function exportMultiple() {
+  const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked'));
+  const indices = checked.map(cb => parseInt(cb.dataset.index));
+  const persona = getCurrentPersona();
+  const coachName = document.getElementById('coachName').value || 'Consulente';
+  
+  const selectedProfiles = indices.map(i => persona.profili[i]);
+  
+  const exportData = {
+    consulente: coachName,
+    persona: persona.nome,
+    azienda: persona.azienda || '',
+    gruppo: persona.gruppo || '',
+    exportDate: new Date().toISOString().split('T')[0],
+    profili: selectedProfiles
+  };
+  
+  const jsonText = JSON.stringify(exportData, null, 2);
+  const fileName = `PAG_Consulente_${persona.nome}_${selectedProfiles.length}profili_${exportData.exportDate}.json`;
+  
+  const blob = new Blob([jsonText], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  toggleMultiSelect();
+  alert(`✅ ${selectedProfiles.length} profili esportati con successo!`);
 }
 
 function showPasteModal() {
